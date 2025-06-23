@@ -27,7 +27,7 @@ with st.sidebar:
     # Published date range
     min_date = datetime.date(1000, 1, 1)
     max_date = datetime.date(2100, 1, 1)
-    default_from_date = datetime.date.today().replace(year=datetime.date.today().year - 3)
+    default_from_date = datetime.date.today().replace(year=datetime.date.today().year - 10)
     from_date = st.date_input("Published from:", value=default_from_date, min_value=min_date, max_value=max_date, format="YYYY-MM-DD")
     to_date = st.date_input("Published until:", min_value=min_date, max_value=max_date, format="YYYY-MM-DD")
     
