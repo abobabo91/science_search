@@ -6,30 +6,36 @@ import datetime
 st.set_page_config(page_title="Research Finder", layout="wide")
 st.title("🔍 Research Finder")
 
+from st_paywall import add_auth
+
+# Basic usage with defaults
+#add_auth()
+
 with st.sidebar:
     run = st.button("Search 🔍")
     
     st.header("Search Filters (Use comma to separate words/phrases)")
 
-    abstract_kw = st.text_input("Must contain:", value='DNA')
-    abstract_kw_opt = st.text_input("May contain at least one of:")
+    abstract_kw = st.text_input("Keywords:", value='DNA')
+    abstract_kw_opt = st.text_input("Keywords (any of these):")
 
     concept_kw = st.text_input("Concepts (exact match):")
     concept_kw_opt = st.text_input("Concepts (any of these):")
 
     countries = st.text_input("Country codes (e.g. us, es, ca):")
-    
-    institutions = st.text_input("Institution IDs (OpenAlex format):")
 
     # Published date range
+    min_date = datetime.date(1000, 1, 1)
+    max_date = datetime.date(2100, 1, 1)
     default_from_date = datetime.date.today().replace(year=datetime.date.today().year - 3)
-    from_date = st.date_input("Published from:", value=default_from_date, format="YYYY-MM-DD")
-    to_date = st.date_input("Published until:", format="YYYY-MM-DD")
+    from_date = st.date_input("Published from:", value=default_from_date, min_value=min_date, max_value=max_date, format="YYYY-MM-DD")
+    to_date = st.date_input("Published until:", min_value=min_date, max_value=max_date, format="YYYY-MM-DD")
     
     num_results = st.number_input("How many papers do you want?", min_value=1, max_value=2000, value=100, step=50)
     
+    institutions = st.text_input("Institution IDs (OpenAlex format):")
     
-
+    
 if run:
     with st.spinner("Querying OpenAlex..."):
         from_str = str(from_date) if from_date else ""
@@ -43,12 +49,28 @@ if run:
         results = query_openalex(filter_str, max_results=num_results)
     
     if results:
+        from datetime import datetime
+
         df = pd.DataFrame([{k: v for k, v in r.items() if k != "AuthorTuples"} for r in results])
-        df["Year"] = df["Year"].astype("Int64").astype(str)
+        
+        # Convert publication date
+        df["Publication Date"] = pd.to_datetime(df["Publication Date"], errors="coerce")
+        
+        # Calculate paper age in fractional years
+        today = pd.Timestamp.today()
+        df["Paper Age"] = (today - df["Publication Date"]).dt.total_seconds() / (365.25 * 24 * 3600)
+        df["Paper Age"] = df["Paper Age"].clip(lower=0.1, upper=5)  # avoid div by zero
+        
+        # Normalized citations
+        df["Normalized Citations"] = (df["Citations"] / df["Paper Age"]).round()
+        
+        # Optional: convert Year for other plots
+        df["Year"] = df["Publication Date"].dt.year.astype("Int64").astype(str)
+        
         st.subheader(f"📚 {len(df)} results found (sorted by citations)")
 
-        with st.expander("🔬 Show Full Results"):
-            st.dataframe(df)
+        
+        st.dataframe(df[["Title", "Authors", "Year", "Citations", "Normalized Citations", 'Journal', 'Link', 'Work ID']])
 
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button("⬇️ Download CSV", csv, "openalex_results.csv", "text/csv")
@@ -114,11 +136,6 @@ if run:
                 file_name="top_authors.csv",
                 mime="text/csv"
             )
-
-               
-
-
-
 
         if "Year" in df.columns and not df["Year"].isnull().all():
             st.markdown("### 🕒 Publications per year in the results")

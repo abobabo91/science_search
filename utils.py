@@ -83,11 +83,11 @@ def query_openalex(filter_string, max_results=100):
                     "Title": result["display_name"],
                     "Authors": "; ".join([a["author"]["display_name"] for a in result["authorships"]]),
                     "AuthorTuples": [(a["author"]["display_name"], a["author"]["id"]) for a in result["authorships"]],
-                    "Year": result.get("publication_year"),
+                    "Publication Date": result.get("publication_date"),
                     "Citations": result.get("cited_by_count"),
                     "Journal": safe_get_nested(result, ["primary_location", "source", "display_name"]),
                     "Link": result.get("primary_location", {}).get("landing_page_url", "N/A"),
-                    "URL": result["id"], 
+                    "Work ID": result["id"], 
                 }
                 for result in r["results"]
             ]
