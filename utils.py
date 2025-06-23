@@ -75,7 +75,7 @@ def query_openalex(filter_string, max_results=100):
 
         try:
             r = requests.get(
-                f"https://api.openalex.org/works?filter={filter_string}&sort=cited_by_count:desc&per_page={page_size}&cursor={cursor}"
+                f"https://api.openalex.org/works?filter={filter_string}&per_page={page_size}&cursor={cursor}"
             ).json()
 
             new_results = [
