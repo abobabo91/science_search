@@ -22,11 +22,11 @@ def build_filter_string(
     filters = []
 
     if abstract_keywords:
-        filters += [f"abstract.search:{kw.strip()}" for kw in abstract_keywords.split(",")]
+        filters += [f"title_and_abstract.search:{kw.strip()}" for kw in abstract_keywords.split(",")]
 
     if abstract_keywords_optional:
         keywords = "|".join([kw.strip() for kw in abstract_keywords_optional.split(",")])
-        filters.append(f"abstract.search:{keywords}")
+        filters.append(f"title_and_abstract.search:{keywords}")
 
     if concept_keywords:
         ids = get_concept_ids(concept_keywords.split(","))
