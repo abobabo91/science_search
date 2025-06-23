@@ -22,8 +22,6 @@ with st.sidebar:
     concept_kw = st.text_input("Concepts (exact match):")
     concept_kw_opt = st.text_input("Concepts (any of these):")
 
-    countries = st.text_input("Country codes (e.g. us, es, ca):")
-
     # Published date range
     min_date = datetime.date(1000, 1, 1)
     max_date = datetime.date(2100, 1, 1)
@@ -33,6 +31,8 @@ with st.sidebar:
     
     num_results = st.number_input("How many papers do you want?", min_value=1, max_value=2000, value=100, step=50)
     
+
+    countries = st.text_input("Country codes (e.g. us, es, ca):")
     institutions = st.text_input("Institution IDs (OpenAlex format):")
     
     
