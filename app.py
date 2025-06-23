@@ -246,8 +246,39 @@ if run:
                 file_name="top_countries.csv",
                 mime="text/csv"
             )
-
-
+    
+            import pycountry
+            
+            def iso2_to_iso3(code):
+                try:
+                    return pycountry.countries.get(alpha_2=code.upper()).alpha_3
+                except:
+                    return None
+            
+            country_stats["ISO-3"] = country_stats["Country"].apply(iso2_to_iso3)
+            
+            import plotly.express as px
+            import numpy as np
+            country_stats["Log Paper Count"] = country_stats["Paper Count"].replace(0, 1)
+            country_stats["Log Paper Count"] = np.log10(country_stats["Log Paper Count"])
+            fig = px.choropleth(
+                country_stats,
+                locations="ISO-3",
+                locationmode="ISO-3",  # if ISO-3 codes; use "ISO-2" for ISO alpha-2
+                color="Log Paper Count",
+                hover_name="Country",
+                hover_data={
+                    "Paper Count": True,         # show this
+                    "Log Paper Count": False,    # hide this
+                    "ISO-3": False               # hide this if you don’t want it
+                },
+                color_continuous_scale="Viridis",
+                title="Top Countries by Paper Count"
+            )
+    
+            st.plotly_chart(fig, use_container_width=True)
+        
+        
         if "Year" in df.columns and not df["Year"].isnull().all():
             st.markdown("### 🕒 Publications per year in the results")
             hist = df["Year"].value_counts().sort_index()
