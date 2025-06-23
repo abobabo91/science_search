@@ -74,10 +74,8 @@ def query_openalex(filter_string, max_results=100):
         page_size = min(per_page, remaining)
 
         try:
-            r = requests.get(
-                f"https://api.openalex.org/works?filter={filter_string}&per_page={page_size}&cursor={cursor}"
-            ).json()
-
+            request_url = f"https://api.openalex.org/works?filter={filter_string}&per_page={page_size}&cursor={cursor}"
+            r = requests.get(request_url).json()
             new_results = [
                 {
                     "Title": result["display_name"],
