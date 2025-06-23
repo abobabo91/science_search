@@ -4,3 +4,4 @@ pandas
 st_paywall 
 pycountry
 numpy
+plotly
