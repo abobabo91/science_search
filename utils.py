@@ -88,6 +88,17 @@ def query_openalex(filter_string, max_results=100):
                     "Journal": safe_get_nested(result, ["primary_location", "source", "display_name"]),
                     "Link": result.get("primary_location", {}).get("landing_page_url", "N/A"),
                     "Work ID": result["id"], 
+                    "InstitutionTuples": [
+                        (inst.get("display_name"), inst.get("id"))
+                        for a in result["authorships"]
+                        for inst in a.get("institutions", [])
+                    ],
+                    "CountryTuples": [
+                        (inst.get("country_code", "").upper())
+                        for a in result["authorships"]
+                        for inst in a.get("institutions", [])
+                        if inst.get("country_code")
+                    ],
                 }
                 for result in r["results"]
             ]

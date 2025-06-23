@@ -137,6 +137,117 @@ if run:
                 mime="text/csv"
             )
 
+
+        if "InstitutionTuples" in results[0]:
+            st.markdown("### 🏛️ Top Institutions by Appearances and Citations")
+
+            inst_records = []
+            for result in results:
+                institutions = result.get("InstitutionTuples", [])
+                num_insts = len(institutions)
+                for name, inst_id in institutions:
+                    inst_records.append({
+                        "Institution": name.strip() if name else "N/A",
+                        "Institution ID": inst_id,
+                        "Citations": result["Citations"],
+                        "Contribution": 1 / num_insts if num_insts else 1
+                    })
+
+            inst_df = pd.DataFrame(inst_records)
+
+            inst_df["OpenAlex URL"] = inst_df["Institution ID"].apply(
+                lambda x: f"https://openalex.org/{x.split('/')[-1]}" if isinstance(x, str) else "N/A"
+            )
+
+            inst_counts = (
+                inst_df["Institution"]
+                .value_counts()
+                .rename_axis("Institution")
+                .reset_index(name="Paper Count")
+            )
+
+            inst_contrib = (
+                inst_df.groupby("Institution", as_index=False)["Contribution"]
+                .sum()
+                .rename(columns={"Contribution": "Normalized Paper Count"})
+            )
+
+            inst_citations = (
+                inst_df.groupby("Institution", as_index=False)["Citations"]
+                .sum()
+                .rename(columns={"Citations": "Total Citations"})
+            )
+
+            inst_urls = (
+                inst_df[["Institution", "OpenAlex URL"]]
+                .drop_duplicates(subset="Institution")
+            )
+
+            inst_stats = inst_counts.merge(inst_contrib, on="Institution")
+            inst_stats = inst_stats.merge(inst_citations, on="Institution")
+            inst_stats = inst_stats.merge(inst_urls, on="Institution", how="left")
+            inst_stats = inst_stats.sort_values(by=["Paper Count", "Total Citations"], ascending=False)
+
+            st.dataframe(inst_stats.head(20).reset_index(drop=True))
+
+            inst_csv = inst_stats.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="⬇️ Download full institution list as CSV",
+                data=inst_csv,
+                file_name="top_institutions.csv",
+                mime="text/csv"
+            )
+
+        if "CountryTuples" in results[0]:
+            st.markdown("### 🌍 Top Countries by Paper Count and Citations")
+
+            country_records = []
+            for result in results:
+                countries = result.get("CountryTuples", [])
+                num_countries = len(countries)
+                for country in countries:
+                    country_records.append({
+                        "Country": country,
+                        "Citations": result["Citations"],
+                        "Contribution": 1 / num_countries if num_countries else 1
+                    })
+
+            country_df = pd.DataFrame(country_records)
+
+            country_counts = (
+                country_df["Country"]
+                .value_counts()
+                .rename_axis("Country")
+                .reset_index(name="Paper Count")
+            )
+
+            country_contrib = (
+                country_df.groupby("Country", as_index=False)["Contribution"]
+                .sum()
+                .rename(columns={"Contribution": "Normalized Paper Count"})
+            )
+
+            country_citations = (
+                country_df.groupby("Country", as_index=False)["Citations"]
+                .sum()
+                .rename(columns={"Citations": "Total Citations"})
+            )
+
+            country_stats = country_counts.merge(country_contrib, on="Country")
+            country_stats = country_stats.merge(country_citations, on="Country")
+            country_stats = country_stats.sort_values(by=["Paper Count", "Total Citations"], ascending=False)
+
+            st.dataframe(country_stats.head(20).reset_index(drop=True))
+
+            country_csv = country_stats.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="⬇️ Download full country list as CSV",
+                data=country_csv,
+                file_name="top_countries.csv",
+                mime="text/csv"
+            )
+
+
         if "Year" in df.columns and not df["Year"].isnull().all():
             st.markdown("### 🕒 Publications per year in the results")
             hist = df["Year"].value_counts().sort_index()
