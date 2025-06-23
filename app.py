@@ -3,7 +3,7 @@ import pandas as pd
 from utils import build_filter_string, query_openalex
 import datetime
 
-st.set_page_config(page_title="Research Finder", layout="wide")
+st.set_page_config(page_title="Research Finder", layout="wide", initial_sidebar_state="expanded")
 st.title("🔍 Research Finder")
 
 from st_paywall import add_auth
