@@ -1,4 +1,5 @@
 import requests
+import streamlit as st
 
 def get_concept_ids(keywords):
     ids = []
@@ -73,41 +74,37 @@ def query_openalex(filter_string, max_results=100):
         remaining = max_results - len(papers)
         page_size = min(per_page, remaining)
 
-        try:
-            request_url = f"https://api.openalex.org/works?filter={filter_string}&per_page={page_size}&cursor={cursor}"
-            r = requests.get(request_url).json()
-            new_results = [
-                {
-                    "Title": result["display_name"],
-                    "Authors": "; ".join([a["author"]["display_name"] for a in result["authorships"]]),
-                    "AuthorTuples": [(a["author"]["display_name"], a["author"]["id"]) for a in result["authorships"]],
-                    "Publication Date": result.get("publication_date"),
-                    "Citations": result.get("cited_by_count"),
-                    "Journal": safe_get_nested(result, ["primary_location", "source", "display_name"]),
-                    "Link": result.get("primary_location", {}).get("landing_page_url", "N/A"),
-                    "Work ID": result["id"], 
-                    "InstitutionTuples": [
-                        (inst.get("display_name"), inst.get("id"))
-                        for a in result["authorships"]
-                        for inst in a.get("institutions", [])
-                    ],
-                    "CountryTuples": [
-                        (inst.get("country_code", "").upper())
-                        for a in result["authorships"]
-                        for inst in a.get("institutions", [])
-                        if inst.get("country_code")
-                    ],
-                }
-                for result in r["results"]
-            ]
+        request_url = f"https://api.openalex.org/works?filter={filter_string}&per_page={page_size}&cursor={cursor}"
+        r = requests.get(request_url).json()
+        new_results = [
+            {
+                "Title": result["display_name"],
+                "Authors": "; ".join([a["author"]["display_name"] for a in result["authorships"]]),
+                "AuthorTuples": [(a["author"]["display_name"], a["author"]["id"]) for a in result["authorships"]],
+                "Publication Date": result.get("publication_date"),
+                "Citations": result.get("cited_by_count"),
+                "Journal": safe_get_nested(result, ["primary_location", "source", "display_name"]),
+                "Link": safe_get_nested(result, ["primary_location", "landing_page_url"]),
+                "Work ID": result["id"], 
+                "InstitutionTuples": [
+                    (inst.get("display_name"), inst.get("id"))
+                    for a in result["authorships"]
+                    for inst in a.get("institutions", [])
+                ],
+                "CountryTuples": [
+                    (inst.get("country_code", "").upper())
+                    for a in result["authorships"]
+                    for inst in a.get("institutions", [])
+                    if inst.get("country_code")
+                ],
+            }
+            for result in r["results"]
+        ]
 
-            papers.extend(new_results)
+        papers.extend(new_results)
 
-            cursor = r["meta"].get("next_cursor")
-            if not cursor or not new_results:
-                break  # no more data
-
-        except:
-            break
+        cursor = r["meta"].get("next_cursor")
+        if not cursor or not new_results:
+            break  # no more data
 
     return papers[:max_results]
