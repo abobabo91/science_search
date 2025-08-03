@@ -97,6 +97,7 @@ def query_openalex(filter_string, max_results=100):
                     for inst in a.get("institutions", [])
                     if inst.get("country_code")
                 ],
+                "concepts": result.get("concepts", []),
             }
             for result in r["results"]
         ]

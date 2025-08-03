@@ -287,5 +287,56 @@ if run:
             st.markdown("### 🕒 Publications per year in the results")
             hist = df["Year"].value_counts().sort_index()
             st.bar_chart(hist)
+  
+        st.markdown("### 📈 Top 10 Most Frequent Concepts Over Time (as share of papers per year)")
+        
+        concept_records = []
+        for result in results:
+            pub_year = pd.to_datetime(result.get("Publication Date", ""), errors="coerce").year
+            concepts = result.get("concepts", [])
+            for concept in concepts:
+                concept_name = concept.get("display_name")
+                if concept_name and not pd.isna(pub_year):
+                    concept_records.append({
+                        "Year": pub_year,
+                        "Concept": concept_name,
+                    })
+    
+        concept_df = pd.DataFrame(concept_records)
+    
+        if not concept_df.empty:
+            # Total papers per year
+            paper_year_counts = df["Year"].value_counts().rename_axis("Year").reset_index(name="TotalPapers")
+            paper_year_counts["Year"] = paper_year_counts["Year"].astype(int)
+    
+            # Concept counts per year
+            concept_year_counts = (
+                concept_df.groupby(["Year", "Concept"])
+                .size()
+                .reset_index(name="ConceptCount")
+            )
+    
+            # Merge total paper counts for ratio
+            concept_year_counts = concept_year_counts.merge(paper_year_counts, on="Year", how="left")
+            concept_year_counts["Share"] = concept_year_counts["ConceptCount"] / concept_year_counts["TotalPapers"]
+    
+            # Get top 10 concepts overall
+            top_concepts = (
+                concept_df["Concept"]
+                .value_counts()
+                .nlargest(10)
+                .index
+            )
+    
+            concept_year_counts_top = concept_year_counts[concept_year_counts["Concept"].isin(top_concepts)]
+    
+            # Pivot for plotting
+            trend_df = concept_year_counts_top.pivot(index="Year", columns="Concept", values="Share").fillna(0)
+            st.line_chart(trend_df)
+        else:
+            st.info("No concept data available to plot trends.")
+          
+
     else:
         st.warning("No results found. Try adjusting your filters.")
+            
