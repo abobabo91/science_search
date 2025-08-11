@@ -15,7 +15,8 @@ for k, v in {
     "paper_df": None,
     "paper_filter_str": None,
     "researcher_results": None,   # list of dicts (one per searched name)
-    "researcher_last_names": "",  # last input string
+    "researcher_last_names": "",
+    "paper_author_stats": None,   
 }.items():
     if k not in st.session_state:
         st.session_state[k] = v
@@ -159,12 +160,12 @@ if page == "Paper Search":
         "openalex_results.xlsx",
         EXCEL_MIME
     )
-
-
+        
+        
     # ----- Top Authors (with affiliation + normalized citations) -----
     if "Authors" in df.columns and "Citations" in df.columns:
-        st.markdown(f"### 👥 Top Authors by Papers and Citations")
-
+        st.markdown("### 👥 Top Authors by Papers and Citations")
+    
         author_records = []
         for r in results:
             # author_id -> (name, affiliation)
@@ -174,11 +175,11 @@ if page == "Paper Search":
                     (aa.get("author_name") or "").strip(),
                     aa.get("affiliation_name") or "N/A"
                 )
-
+    
             authors = r.get("AuthorTuples", [])
             num_authors = len(authors) or 1
             citations = r.get("Citations", 0) or 0
-
+    
             for name, aid, orcid in authors:
                 disp_name = (name or "").strip()
                 nm, aff = aff_map.get(aid, (disp_name, "N/A"))
@@ -192,12 +193,12 @@ if page == "Paper Search":
                     "Citations": citations,
                     "Citations_Fraction": citations / num_authors
                 })
-
+    
         authors_df = pd.DataFrame(author_records)
         authors_df["OpenAlex URL"] = authors_df["AuthorID_short"].apply(
             lambda sid: f"https://openalex.org/{sid}" if sid else "N/A"
         )
-
+    
         author_stats = (
             authors_df.groupby("AuthorID_short", as_index=False)
             .agg(
@@ -211,21 +212,39 @@ if page == "Paper Search":
                 OpenAlex_URL=("OpenAlex URL", "first")
             )
         )
-        
+    
         author_stats["Normalized_Citations"] = author_stats["Normalized_Citations"].astype(int)
         author_stats["Impact"] = ((author_stats["Paper_Count"] - 0.8) * author_stats["Normalized_Citations"]).astype(int)
-#        author_stats["Impact"] = ((author_stats["Normalized_Paper_Count"] - 0.0) * author_stats["Normalized_Citations"]).astype(int)
-        author_stats = author_stats.sort_values(by=["Impact"], ascending=False)
-        # ---- Breakthrough Potential for Top 100 authors (computed on Paper Search page) ----
-        import numpy as np
-        import pandas as pd
+        author_stats = author_stats.sort_values(by=["Impact"], ascending=False).reset_index(drop=True)
+    
+        # Always keep the latest base table available for the other pages
+        st.session_state.paper_author_stats = author_stats.copy()
+    
+        # --- UI for Breakthrough Potential ---
+        base_cols = ["Author", "Affiliation", "Paper_Count", "Normalized_Paper_Count",
+                     "Total_Citations", "Normalized_Citations", "Impact", "OpenAlex_URL"]
+        extra_cols = ["Recent", "Baseline", "Ratio", "BreakthroughPotential"]
+    
 
-        calc_bpot = st.button("⚡ Recalculate Breakthrough Potential for Top K")
-
+        top_k = st.number_input(
+            "Top K to evaluate",
+            min_value=5,
+            max_value=int(min(2000, len(author_stats))),
+            value=min(50, len(author_stats)),
+            step=10,
+            help="Only the top K by Impact will get Breakthrough metrics."
+        )
+        calc_bpot = st.button("⚡ (Re)Calculate Breakthrough Potential for Top K")
+    
+        # Pre-create extra columns (NaN) so base display works cleanly
+        for c in extra_cols:
+            if c not in author_stats.columns:
+                author_stats[c] = np.nan
+    
         if calc_bpot:
-            # Clear any cache for trajectory builder so new fetch happens
+            # Clear caches so we fetch fresh data
             st.cache_data.clear()
-
+    
             @st.cache_data(show_spinner=False)
             def _build_trajectory_for_author(author_id_url: str, max_results: int = 400):
                 works = fetch_author_works(author_id_url, max_results=max_results)
@@ -257,11 +276,11 @@ if page == "Paper Search":
                          .reset_index()
                          .rename(columns={"index": "Year"}))
                 return out
-
-            def _trim_early_zero_run(df):
-                if df.empty or "Publications" not in df.columns:
-                    return df
-                out = df.reset_index(drop=True).copy()
+    
+            def _trim_early_zero_run(df_):
+                if df_.empty or "Publications" not in df_.columns:
+                    return df_
+                out = df_.reset_index(drop=True).copy()
                 pubs = out["Publications"].astype(int).tolist()
                 zero_run, last_run_end_idx = 0, None
                 for i, v in enumerate(pubs):
@@ -275,84 +294,76 @@ if page == "Paper Search":
                     start_year = int(out.loc[last_run_end_idx, "Year"]) + 1
                     out = out[out["Year"] >= start_year].reset_index(drop=True)
                 return out
-
-            def _smooth_5y_centered(df):
-                sm = df.copy()
+    
+            def _smooth_5y_centered(df_):
+                sm = df_.copy()
                 for c in ["Publications", "Citations", "NormalizedCitations"]:
                     sm[f"{c}_Smoothed"] = sm[c].rolling(5, min_periods=1).mean()
                 return sm
-
-            def _compute_ratio_metric(df, col="NormalizedCitations_Smoothed"):
-                if df.empty or col not in df.columns:
+    
+            def _compute_ratio_metric(df_, col="NormalizedCitations_Smoothed"):
+                if df_.empty or col not in df_.columns:
                     return (np.nan, np.nan, np.nan, None)
-                d = df.dropna(subset=["Year", col]).sort_values("Year")
+                d = df_.dropna(subset=["Year", col]).sort_values("Year")
                 if d.empty:
                     return (np.nan, np.nan, np.nan, None)
                 y_max = int(d["Year"].max())
                 last3 = d[d["Year"].between(y_max - 2, y_max)][col].sum()
                 base_win = d[d["Year"].between(y_max - 13, y_max - 10)]
-                if base_win.empty:
-                    base3 = d.head(3)[col].sum()
-                else:
-                    base3 = base_win[col].sum()
+                base3 = base_win[col].sum() if not base_win.empty else d.head(3)[col].sum()
                 if base3 == 0:
                     return (1.0, last3, base3, y_max)
                 ratio = last3 / base3
                 return (ratio, last3, base3, y_max)
-
-            # Prepare columns (default NaN)
-            for col in ["Recent", "Baseline", "Ratio", "BreakthroughPotential"]:
-                if col not in author_stats.columns:
-                    author_stats[col] = np.nan
-                else:
-                    author_stats[col] = np.nan  # reset previous results
-
-            topN = author_stats.head(250).copy()
+    
+            # Work only on the top K
+            topN = author_stats.head(int(top_k)).copy()
             st.markdown(f"### ⚡ Computing breakthrough potential for Top {len(topN)} authors")
             prog = st.progress(0.0)
-
+    
+            # Fill only the top K rows with computed values; others remain NaN
             rows_update = []
             total = len(topN)
-            for i, row in topN.iterrows():
+            for n_done, (i, row) in enumerate(topN.iterrows(), start=1):
                 aid_short = row["AuthorID_short"]
                 a_url = row.get("OpenAlex_URL") or f"https://openalex.org/{aid_short}"
                 try:
                     t = _build_trajectory_for_author(a_url, max_results=2000)
                     if t.empty:
                         ratio, last3, base3 = (np.nan, np.nan, np.nan)
+                        bpot = np.nan
                     else:
                         t = _trim_early_zero_run(t)
                         t_sm = _smooth_5y_centered(t)
                         ratio, last3, base3, _ = _compute_ratio_metric(t_sm)
-                    bpot = last3 * (ratio ** 0.5) if pd.notna(ratio) and pd.notna(last3) else np.nan
-                    bpot = np.log(bpot)
+                        bpot_raw = last3 * (ratio ** 0.5) if pd.notna(ratio) and pd.notna(last3) else np.nan
+                        bpot = np.log(bpot_raw) if pd.notna(bpot_raw) and bpot_raw > 0 else np.nan
                 except Exception:
                     ratio, last3, base3, bpot = (np.nan, np.nan, np.nan, np.nan)
-                rows_update.append((i, last3, base3, ratio, bpot))
-                prog.progress((len(rows_update)) / max(total, 1))
-
-            for idx, last3, base3, ratio, bpot in rows_update:
-                author_stats.loc[idx, "Recent"] = last3
-                author_stats.loc[idx, "Baseline"] = base3
-                author_stats.loc[idx, "Ratio"] = ratio
-                author_stats.loc[idx, "BreakthroughPotential"] = bpot
-
+    
+                author_stats.loc[i, "Recent"] = last3
+                author_stats.loc[i, "Baseline"] = base3
+                author_stats.loc[i, "Ratio"] = ratio
+                author_stats.loc[i, "BreakthroughPotential"] = bpot
+    
+                prog.progress(n_done / max(total, 1))
+    
+            # Save enhanced table for other pages to use
             st.session_state.paper_author_stats = author_stats.copy()
-
-
-        # Update what we show + what we export
-        show_cols = ["Author", "Affiliation", "Paper_Count", "Normalized_Paper_Count",
-                     "Total_Citations", "Normalized_Citations", "Impact",
-                     "Recent", "Baseline", "Ratio", "BreakthroughPotential", "OpenAlex_URL"]
-        st.dataframe(st.session_state.paper_author_stats[show_cols].head(250).reset_index(drop=True))
-        
+    
+        # ---- Display (base only if not computed; base+extra if computed) ----
+        has_bpot = author_stats["BreakthroughPotential"].notna().any() if "BreakthroughPotential" in author_stats.columns else False
+        cols_to_show = base_cols + (extra_cols if has_bpot else [])
+        st.dataframe(author_stats[cols_to_show].head(250).reset_index(drop=True))
+    
         st.download_button(
             f"⬇️ Download full author list (Excel) ({len(author_stats)} Authors)",
-            to_excel_bytes(st.session_state.paper_author_stats[show_cols], "authors"),
+            to_excel_bytes(author_stats[cols_to_show], "authors"),
             "top_authors.xlsx",
             EXCEL_MIME
         )
-        
+    
+            
 
 
     # ----- Top Institutions (unique per paper, with normalized citations) -----
