@@ -5,3 +5,5 @@ st_paywall
 pycountry
 numpy
 plotly
+xlsxwriter
+xlrd
